@@ -5,7 +5,7 @@
 # 2. login freesound()
 # 3. Download freesound music
 ################################ 
-# python執行引述輸入格式說明 [檔名.py] [tag or search] [搜尋文字] [起始下載數量(從1開始數)] [結尾下載數量(含最後一個)] [下載位置(最後面必須加'/')] 
+# python執行引述輸入格式說明 [檔名.py] [tag or search] [搜尋文字] [起始下載數量(從1開始數)] [結尾下載數量(含最後一個)] [下載位置(最後面必須加'/')]
 ################################
 import requests
 from bs4 import BeautifulSoup
@@ -25,11 +25,13 @@ class freesound():
             # 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36',
         }
 
+        self.TIMEOUT = 5 # requests time out setting (seconds)
+
     def login_freesound(self,USERNAME,PASSWORD):
         # 登入freesound
 
         # Retrieve the CSRF token first
-        self.session.get(self.LOGIN_URL)  # sets cookie
+        self.session.get(self.LOGIN_URL,timeout = self.TIMEOUT)  # sets cookie
         if 'csrftoken' in self.session.cookies:
             # Django 1.6 and up
             csrftoken = self.session.cookies['csrftoken']
@@ -47,7 +49,7 @@ class freesound():
                 }
             
         # 以POST method登入
-        result = self.session.post(self.LOGIN_URL,headers = self.headers,data=data)
+        result = self.session.post(self.LOGIN_URL,headers = self.headers,data=data,timeout = self.TIMEOUT)
         print('登入回應 status_code : %d' % result.status_code)
 
         return result #login page
@@ -76,7 +78,7 @@ class freesound():
 
         local_filename = url.split('/')[-1]
         # NOTE the stream=True parameter below
-        with self.session.get(url,stream=True) as r:
+        with self.session.get(url,stream=True,timeout = self.TIMEOUT) as r:
             print("連線狀態:%d，正在下載 %s 中..." % (r.status_code,local_filename))
             r.raise_for_status()
             with open( file_path + local_filename , 'wb' ) as f:
@@ -90,7 +92,7 @@ class freesound():
     def test_load_html(self,url): 
         # 用Get方法取得網頁內容
         print('load html url : %s' % url)
-        result = self.session.get(url)
+        result = self.session.get(url,timeout = self.TIMEOUT)
         print('status_code : %d' % result.status_code)
         return result
 
@@ -105,7 +107,7 @@ class freesound():
             page_num = str(num_times // 15 + 1)
 
             try :
-                response = self.session.get(title_url +'page='+ page_num +'#sound')
+                response = self.session.get(title_url +'page='+ page_num +'#sound',timeout = self.TIMEOUT)
 
                 soup = BeautifulSoup(response.text, "html.parser")
                 result_bs4 = soup.find_all("div", class_="sound_filename", limit=15) # 找到搜尋結果頁面上每一個項目的音樂名稱內容
@@ -119,13 +121,14 @@ class freesound():
                     
                     if start_flag == True:
                         file_num_href_url = title.select_one("a").get("href") # 找到搜尋結果頁面上每一個項目的 href 連結網址
+                        # print('file num href url :',str(file_num_href_url)) 
 
                         try:
-                            response2 = self.session.get('https://freesound.org' + file_num_href_url) # 進入連結網址找下載音樂的網址
+                            response2 = self.session.get('https://freesound.org' + file_num_href_url,timeout = self.TIMEOUT) # 進入連結網址找下載音樂的網址
                             soup2 = BeautifulSoup(response2.text, "html.parser") 
                             result_bs4_2 = soup2.find("div", id="download") # 找含有download項目的內容
                             file_href_url = result_bs4_2.select_one("a").get("href") # 找到音樂 href 下載網址
-                            # print(file_href_url) 
+                            # print('file href url :',file_href_url) 
                             
                             self.download_music('https://freesound.org' + file_num_href_url + 'download' + file_href_url, file_path) #下載音樂
                             
@@ -141,6 +144,12 @@ class freesound():
                             return "Download finish!"
                     # else:
                     #     print('還沒數到起始點，跳過')
+                if start_flag == False:
+                    print('頁面的搜尋結果未滿15個項目，直接計數已下載數量+1')
+                    num_times += 1
+                    if num_times >= num:
+                        return "Download finish!"
+                    
             except (EOFError, KeyboardInterrupt):
                 sys.exit()
             except :
